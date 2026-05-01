@@ -3,37 +3,52 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Interactive Video Choice Game</title>
+  <title>Interactive Cloudflare Stream Choice Game</title>
   <style>
     * { box-sizing: border-box; }
-    body {
+
+    html, body {
+      width: 100%;
+      height: 100%;
       margin: 0;
-      background: #050505;
+      background: #000;
       color: white;
       font-family: Arial, sans-serif;
       overflow: hidden;
     }
+
     #app {
       width: 100vw;
       height: 100vh;
       position: relative;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      background: black;
+      background: #000;
     }
-    video {
+
+    #playerContainer {
+      position: absolute;
+      inset: 0;
       width: 100vw;
       height: 100vh;
-      object-fit: cover;
-      background: black;
+      background: #000;
+      overflow: hidden;
     }
+
+    #playerContainer iframe {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: #000;
+    }
+
     #choiceLayer {
       position: absolute;
       inset: 0;
       display: none;
-      z-index: 10;
+      z-index: 20;
     }
+
     .choiceZone {
       position: absolute;
       left: 0;
@@ -45,9 +60,11 @@
       padding: 0;
       margin: 0;
     }
+
     .choiceZone:hover {
       background: rgba(255, 255, 255, 0.06);
     }
+
     #choiceA { top: 0%; }
     #choiceB { top: 25%; }
     #choiceC { top: 50%; }
@@ -57,32 +74,56 @@
       position: absolute;
       top: 18px;
       left: 18px;
-      z-index: 20;
-      background: rgba(0, 0, 0, 0.45);
+      z-index: 30;
+      background: rgba(0, 0, 0, 0.5);
       padding: 10px 14px;
       border-radius: 10px;
       font-size: 14px;
       line-height: 1.4;
       pointer-events: none;
     }
+
     #hint {
       position: absolute;
       bottom: 24px;
       left: 50%;
       transform: translateX(-50%);
-      z-index: 20;
-      background: rgba(0, 0, 0, 0.6);
+      z-index: 30;
+      background: rgba(0, 0, 0, 0.7);
       padding: 12px 18px;
       border-radius: 999px;
       font-size: 16px;
       display: none;
       pointer-events: none;
       text-align: center;
+      max-width: calc(100vw - 32px);
     }
+
+    #startOverlay {
+      position: absolute;
+      inset: 0;
+      display: none;
+      z-index: 40;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.72);
+      text-align: center;
+      padding: 24px;
+    }
+
+    #startButton, #restartBtn {
+      padding: 12px 20px;
+      border-radius: 999px;
+      border: 0;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: bold;
+    }
+
     #resultScreen {
       position: absolute;
       inset: 0;
-      z-index: 30;
+      z-index: 50;
       display: none;
       justify-content: center;
       align-items: center;
@@ -90,6 +131,7 @@
       padding: 24px;
       text-align: center;
     }
+
     #resultCard {
       max-width: 720px;
       width: 100%;
@@ -99,23 +141,15 @@
       background: rgba(255,255,255,.06);
       box-shadow: 0 20px 80px rgba(0,0,0,.45);
     }
+
     #resultCard h1 { margin: 0 0 10px; font-size: 42px; }
     #resultCard h2 { margin: 0 0 18px; font-size: 26px; opacity: .9; }
     #resultCard p { font-size: 18px; line-height: 1.5; opacity: .9; }
-    #restartBtn {
-      margin-top: 18px;
-      padding: 12px 18px;
-      border-radius: 999px;
-      border: 0;
-      cursor: pointer;
-      font-size: 16px;
-      font-weight: bold;
-    }
   </style>
 </head>
 <body>
   <main id="app">
-    <video id="mainVideo" autoplay playsinline></video>
+    <div id="playerContainer"></div>
 
     <div id="choiceLayer" aria-label="Invisible video choice buttons">
       <button id="choiceA" class="choiceZone" aria-label="Choice A: Secure"></button>
@@ -124,8 +158,19 @@
       <button id="choiceD" class="choiceZone" aria-label="Choice D: Fearful"></button>
     </div>
 
-    <div id="status">Question <span id="questionNumber">1</span> / <span id="questionTotal">5</span><br>Anxiety: <span id="anxietyScore">0</span> | Avoidance: <span id="avoidanceScore">0</span></div>
+    <div id="status">
+      Question <span id="questionNumber">1</span> / <span id="questionTotal">5</span><br>
+      Anxiety: <span id="anxietyScore">0</span> | Avoidance: <span id="avoidanceScore">0</span>
+    </div>
+
     <div id="hint">Choose by clicking the video: top = A, second = B, third = C, bottom = D</div>
+
+    <div id="startOverlay">
+      <div>
+        <p>Click start to begin the interactive video.</p>
+        <button id="startButton">Start</button>
+      </div>
+    </div>
 
     <section id="resultScreen">
       <div id="resultCard">
@@ -137,58 +182,53 @@
     </section>
   </main>
 
+  <!-- Required for Cloudflare Stream iframe player events such as ended/play/pause. -->
+  <script src="https://embed.cloudflarestream.com/embed/sdk.latest.js"></script>
+
   <script>
     /**************************************************************
-     * HOW TO USE
-     * 1. Replace the placeholder video URLs below with your own files.
-     *    Example: "videos/intro.mp4" or a direct .mp4 link.
-     * 2. Structure:
-     *    - 1 intro video
-     *    - 5 choice videos, played in order no matter which choice is clicked
-     *    - after the 5th choice, the site calculates the final result
-     *    - then it plays 1 of 4 result videos
-     * 3. Invisible click zones appear only after each choice video ends.
-     *    A = top quarter = Secure
-     *    B = second quarter = Anxious
-     *    C = third quarter = Dismissive
-     *    D = bottom quarter = Fearful
+     * IMPORTANT
+     * This version is for Cloudflare Stream iframe URLs.
+     * Use the /iframe URL, NOT the /watch URL.
+     * Example:
+     * https://customer-xxxx.cloudflarestream.com/VIDEO_UID/iframe
      **************************************************************/
 
     const videos = [
       {
         id: "intro",
         type: "intro",
-        src: "https://customer-cpwq0pj4qnpycdbg.cloudflarestream.com/7401a9142e7af16f79611b87e1747fb8/iframe?poster=https%3A%2F%2Fcustomer-cpwq0pj4qnpycdbg.cloudflarestream.com%2F7401a9142e7af16f79611b87e1747fb8%2Fthumbnails%2Fthumbnail.jpg%3Ftime%3D%26height%3D600",
+        embedSrc: "https://customer-cpwq0pj4qnpycdbg.cloudflarestream.com/7401a9142e7af16f79611b87e1747fb8/iframe?poster=https%3A%2F%2Fcustomer-cpwq0pj4qnpycdbg.cloudflarestream.com%2F7401a9142e7af16f79611b87e1747fb8%2Fthumbnails%2Fthumbnail.jpg%3Ftime%3D%26height%3D600",
         next: "choice1"
       },
       {
         id: "choice1",
         type: "choice",
-        src: "https://customer-cpwq0pj4qnpycdbg.cloudflarestream.com/171a12e2b2e253e7a27719ba5c42596d/iframe?poster=https%3A%2F%2Fcustomer-cpwq0pj4qnpycdbg.cloudflarestream.com%2F171a12e2b2e253e7a27719ba5c42596d%2Fthumbnails%2Fthumbnail.jpg%3Ftime%3D%26height%3D600",
+        embedSrc: "https://customer-cpwq0pj4qnpycdbg.cloudflarestream.com/171a12e2b2e253e7a27719ba5c42596d/iframe?poster=https%3A%2F%2Fcustomer-cpwq0pj4qnpycdbg.cloudflarestream.com%2F171a12e2b2e253e7a27719ba5c42596d%2Fthumbnails%2Fthumbnail.jpg%3Ftime%3D%26height%3D600",
         next: "choice2"
       },
       {
         id: "choice2",
         type: "choice",
-        src: "https://customer-cpwq0pj4qnpycdbg.cloudflarestream.com/5419c5fa8f7e2e8d01b80f39b562d9cb/iframe?poster=https%3A%2F%2Fcustomer-cpwq0pj4qnpycdbg.cloudflarestream.com%2F5419c5fa8f7e2e8d01b80f39b562d9cb%2Fthumbnails%2Fthumbnail.jpg%3Ftime%3D%26height%3D600",
+        embedSrc: "https://customer-cpwq0pj4qnpycdbg.cloudflarestream.com/5419c5fa8f7e2e8d01b80f39b562d9cb/iframe?poster=https%3A%2F%2Fcustomer-cpwq0pj4qnpycdbg.cloudflarestream.com%2F5419c5fa8f7e2e8d01b80f39b562d9cb%2Fthumbnails%2Fthumbnail.jpg%3Ftime%3D%26height%3D600",
         next: "choice3"
       },
       {
         id: "choice3",
         type: "choice",
-        src: "https://customer-cpwq0pj4qnpycdbg.cloudflarestream.com/47890e1f124b620117128d8c68c6e2f2/iframe?poster=https%3A%2F%2Fcustomer-cpwq0pj4qnpycdbg.cloudflarestream.com%2F47890e1f124b620117128d8c68c6e2f2%2Fthumbnails%2Fthumbnail.jpg%3Ftime%3D%26height%3D600",
+        embedSrc: "https://customer-cpwq0pj4qnpycdbg.cloudflarestream.com/47890e1f124b620117128d8c68c6e2f2/iframe?poster=https%3A%2F%2Fcustomer-cpwq0pj4qnpycdbg.cloudflarestream.com%2F47890e1f124b620117128d8c68c6e2f2%2Fthumbnails%2Fthumbnail.jpg%3Ftime%3D%26height%3D600",
         next: "choice4"
       },
       {
         id: "choice4",
         type: "choice",
-        src: "https://customer-cpwq0pj4qnpycdbg.cloudflarestream.com/8c17cd24d0a71ce8bdcff33631cdae86/iframe?poster=https%3A%2F%2Fcustomer-cpwq0pj4qnpycdbg.cloudflarestream.com%2F8c17cd24d0a71ce8bdcff33631cdae86%2Fthumbnails%2Fthumbnail.jpg%3Ftime%3D%26height%3D600",
+        embedSrc: "https://customer-cpwq0pj4qnpycdbg.cloudflarestream.com/8c17cd24d0a71ce8bdcff33631cdae86/iframe?poster=https%3A%2F%2Fcustomer-cpwq0pj4qnpycdbg.cloudflarestream.com%2F8c17cd24d0a71ce8bdcff33631cdae86%2Fthumbnails%2Fthumbnail.jpg%3Ftime%3D%26height%3D600",
         next: "choice5"
       },
       {
         id: "choice5",
         type: "choice",
-        src: "https://customer-cpwq0pj4qnpycdbg.cloudflarestream.com/d3aabbc4b9d9ed4192c0208276dae8b3/iframe?poster=https%3A%2F%2Fcustomer-cpwq0pj4qnpycdbg.cloudflarestream.com%2Fd3aabbc4b9d9ed4192c0208276dae8b3%2Fthumbnails%2Fthumbnail.jpg%3Ftime%3D%26height%3D600",
+        embedSrc: "https://customer-cpwq0pj4qnpycdbg.cloudflarestream.com/d3aabbc4b9d9ed4192c0208276dae8b3/iframe?poster=https%3A%2F%2Fcustomer-cpwq0pj4qnpycdbg.cloudflarestream.com%2Fd3aabbc4b9d9ed4192c0208276dae8b3%2Fthumbnails%2Fthumbnail.jpg%3Ftime%3D%26height%3D600",
         nextByResult: {
           Secure: "resultSecure",
           Anxious: "resultAnxious",
@@ -199,22 +239,22 @@
       {
         id: "resultSecure",
         type: "result",
-        src: "https://customer-cpwq0pj4qnpycdbg.cloudflarestream.com/6960edd747f2bd209fef7bd5ba1791d1/iframe?poster=https%3A%2F%2Fcustomer-cpwq0pj4qnpycdbg.cloudflarestream.com%2F6960edd747f2bd209fef7bd5ba1791d1%2Fthumbnails%2Fthumbnail.jpg%3Ftime%3D%26height%3D600"
+        embedSrc: "https://customer-cpwq0pj4qnpycdbg.cloudflarestream.com/6960edd747f2bd209fef7bd5ba1791d1/iframe?poster=https%3A%2F%2Fcustomer-cpwq0pj4qnpycdbg.cloudflarestream.com%2F6960edd747f2bd209fef7bd5ba1791d1%2Fthumbnails%2Fthumbnail.jpg%3Ftime%3D%26height%3D600"
       },
       {
         id: "resultAnxious",
         type: "result",
-        src: "https://customer-cpwq0pj4qnpycdbg.cloudflarestream.com/5a99ce11afea19c0a8983a6c9173686c/iframe?poster=https%3A%2F%2Fcustomer-cpwq0pj4qnpycdbg.cloudflarestream.com%2F5a99ce11afea19c0a8983a6c9173686c%2Fthumbnails%2Fthumbnail.jpg%3Ftime%3D%26height%3D600"
+        embedSrc: "https://customer-cpwq0pj4qnpycdbg.cloudflarestream.com/5a99ce11afea19c0a8983a6c9173686c/iframe?poster=https%3A%2F%2Fcustomer-cpwq0pj4qnpycdbg.cloudflarestream.com%2F5a99ce11afea19c0a8983a6c9173686c%2Fthumbnails%2Fthumbnail.jpg%3Ftime%3D%26height%3D600"
       },
       {
         id: "resultDismissive",
         type: "result",
-        src: "https://customer-cpwq0pj4qnpycdbg.cloudflarestream.com/1552b92c55e5dbcdfe54629b445b0bfe/iframe?poster=https%3A%2F%2Fcustomer-cpwq0pj4qnpycdbg.cloudflarestream.com%2F1552b92c55e5dbcdfe54629b445b0bfe%2Fthumbnails%2Fthumbnail.jpg%3Ftime%3D%26height%3D600"
+        embedSrc: "https://customer-cpwq0pj4qnpycdbg.cloudflarestream.com/1552b92c55e5dbcdfe54629b445b0bfe/iframe?poster=https%3A%2F%2Fcustomer-cpwq0pj4qnpycdbg.cloudflarestream.com%2F1552b92c55e5dbcdfe54629b445b0bfe%2Fthumbnails%2Fthumbnail.jpg%3Ftime%3D%26height%3D600"
       },
       {
         id: "resultFearful",
         type: "result",
-        src: "https://customer-cpwq0pj4qnpycdbg.cloudflarestream.com/3f9fcaec391400bfc970f53662ff7919/iframe?poster=https%3A%2F%2Fcustomer-cpwq0pj4qnpycdbg.cloudflarestream.com%2F3f9fcaec391400bfc970f53662ff7919%2Fthumbnails%2Fthumbnail.jpg%3Ftime%3D%26height%3D600"
+        embedSrc: "https://customer-cpwq0pj4qnpycdbg.cloudflarestream.com/3f9fcaec391400bfc970f53662ff7919/iframe?poster=https%3A%2F%2Fcustomer-cpwq0pj4qnpycdbg.cloudflarestream.com%2F3f9fcaec391400bfc970f53662ff7919%2Fthumbnails%2Fthumbnail.jpg%3Ftime%3D%26height%3D600"
       }
     ];
 
@@ -249,19 +289,26 @@
     ];
 
     const videoMap = Object.fromEntries(videos.map(video => [video.id, video]));
-    const mainVideo = document.getElementById("mainVideo");
+    const playerContainer = document.getElementById("playerContainer");
     const choiceLayer = document.getElementById("choiceLayer");
     const hint = document.getElementById("hint");
     const resultScreen = document.getElementById("resultScreen");
     const status = document.getElementById("status");
+    const startOverlay = document.getElementById("startOverlay");
 
     let currentVideoId = "intro";
+    let currentPlayer = null;
     let anxiety = 0;
     let avoidance = 0;
     let questionNumber = 1;
     const totalQuestions = 5;
 
     document.getElementById("questionTotal").textContent = totalQuestions;
+
+    function addCloudflareParams(url) {
+      const separator = url.includes("?") ? "&" : "?";
+      return `${url}${separator}autoplay=true&muted=true&controls=false`;
+    }
 
     function getFinalResult() {
       const scores = { anxiety, avoidance };
@@ -282,31 +329,7 @@
       document.getElementById("avoidanceScore").textContent = avoidance;
     }
 
-    function playVideo(videoId) {
-      const videoData = videoMap[videoId];
-      if (!videoData) {
-        console.error("Missing video ID:", videoId);
-        showFinalResult();
-        return;
-      }
-
-      currentVideoId = videoId;
-      choiceLayer.style.display = "none";
-      hint.style.display = "none";
-      resultScreen.style.display = "none";
-
-      mainVideo.src = videoData.src;
-      mainVideo.currentTime = 0;
-      mainVideo.muted = false;
-      mainVideo.play().catch(() => {
-        mainVideo.muted = true;
-        mainVideo.play();
-      });
-
-      updateStatus();
-    }
-
-    mainVideo.addEventListener("ended", () => {
+    function handleVideoEnded() {
       const current = videoMap[currentVideoId];
       if (!current) return;
 
@@ -324,7 +347,42 @@
       if (current.type === "result") {
         showFinalResult();
       }
-    });
+    }
+
+    function playVideo(videoId) {
+      const videoData = videoMap[videoId];
+
+      if (!videoData) {
+        console.error("Missing video ID:", videoId);
+        showFinalResult();
+        return;
+      }
+
+      currentVideoId = videoId;
+      choiceLayer.style.display = "none";
+      hint.style.display = "none";
+      resultScreen.style.display = "none";
+      startOverlay.style.display = "none";
+
+      playerContainer.innerHTML = "";
+
+      const iframe = document.createElement("iframe");
+      iframe.id = "streamPlayer";
+      iframe.src = addCloudflareParams(videoData.embedSrc);
+      iframe.allow = "accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen";
+      iframe.allowFullscreen = true;
+
+      playerContainer.appendChild(iframe);
+
+      currentPlayer = Stream(iframe);
+      currentPlayer.addEventListener("ended", handleVideoEnded);
+
+      currentPlayer.play().catch(() => {
+        startOverlay.style.display = "flex";
+      });
+
+      updateStatus();
+    }
 
     function choose(choiceLetter) {
       const current = videoMap[currentVideoId];
@@ -344,15 +402,13 @@
       playVideo(current.next);
     }
 
-    document.getElementById("choiceA").addEventListener("click", () => choose("A"));
-    document.getElementById("choiceB").addEventListener("click", () => choose("B"));
-    document.getElementById("choiceC").addEventListener("click", () => choose("C"));
-    document.getElementById("choiceD").addEventListener("click", () => choose("D"));
-
     function showFinalResult() {
       const result = getFinalResult();
 
-      mainVideo.pause();
+      if (currentPlayer) {
+        currentPlayer.pause();
+      }
+
       choiceLayer.style.display = "none";
       hint.style.display = "none";
       status.style.display = "none";
@@ -364,14 +420,35 @@
         `Final score: Anxiety ${anxiety}, Avoidance ${avoidance}. Your choices created this ending based on the scoring table.`;
     }
 
+    document.getElementById("choiceA").addEventListener("click", () => choose("A"));
+    document.getElementById("choiceB").addEventListener("click", () => choose("B"));
+    document.getElementById("choiceC").addEventListener("click", () => choose("C"));
+    document.getElementById("choiceD").addEventListener("click", () => choose("D"));
+
+    document.getElementById("startButton").addEventListener("click", () => {
+      startOverlay.style.display = "none";
+      if (currentPlayer) {
+        currentPlayer.muted = false;
+        currentPlayer.play().catch(() => {
+          currentPlayer.muted = true;
+          currentPlayer.play();
+        });
+      } else {
+        playVideo(currentVideoId);
+      }
+    });
+
     document.getElementById("restartBtn").addEventListener("click", () => {
       anxiety = 0;
       avoidance = 0;
       questionNumber = 1;
-      playVideo("intro");
+      currentVideoId = "intro";
+      playVideo(currentVideoId);
     });
 
-    playVideo(currentVideoId);
+    window.addEventListener("load", () => {
+      playVideo(currentVideoId);
+    });
   </script>
 </body>
 </html>
