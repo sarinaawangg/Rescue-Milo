@@ -191,7 +191,7 @@
 
     <div id="startOverlay">
       <div>
-        <p>Click start to begin the interactive video.</p>
+        <p>Click start to begin the interactive video with sound.</p>
         <button id="startButton">Start</button>
       </div>
     </div>
@@ -336,7 +336,7 @@
 
     function addCloudflareParams(url) {
       const separator = url.includes("?") ? "&" : "?";
-      return `${url}${separator}autoplay=true&muted=true&controls=false`;
+      return `${url}${separator}autoplay=true&muted=false&controls=false`;
     }
 
     function getFinalResult() {
@@ -464,6 +464,8 @@
       playerContainer.appendChild(iframe);
 
       currentPlayer = Stream(iframe);
+      currentPlayer.muted = false;
+      currentPlayer.volume = 1;
       currentPlayer.addEventListener("ended", handleVideoEnded);
 
       if (videoData.type === "choice") {
@@ -544,9 +546,9 @@
       startOverlay.style.display = "none";
       if (currentPlayer) {
         currentPlayer.muted = false;
+        currentPlayer.volume = 1;
         currentPlayer.play().catch(() => {
-          currentPlayer.muted = true;
-          currentPlayer.play();
+          startOverlay.style.display = "flex";
         });
       } else {
         playVideo(currentVideoId);
