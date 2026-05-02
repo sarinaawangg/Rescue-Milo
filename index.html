@@ -91,6 +91,15 @@
       outline: none;
     }
 
+    /* When the intro video finishes, the invisible continue button covers the whole screen. */
+    #cornerButton.fullScreenIntroButton {
+      inset: 0;
+      right: auto;
+      bottom: auto;
+      width: 100vw;
+      height: 100vh;
+    }
+
     #status {
       position: absolute;
       left: 18px;
@@ -346,6 +355,16 @@
 
 
     function showCornerButton() {
+      const current = videoMap[currentVideoId];
+
+      // Intro: after the intro video finishes, clicking anywhere continues to Choice 1.
+      // Results: after a result video finishes, only the lower-right invisible button restarts.
+      if (current && current.type === "intro") {
+        cornerButton.classList.add("fullScreenIntroButton");
+      } else {
+        cornerButton.classList.remove("fullScreenIntroButton");
+      }
+
       cornerButtonActive = true;
       cornerButton.style.display = "block";
     }
@@ -353,6 +372,7 @@
     function hideCornerButton() {
       cornerButtonActive = false;
       cornerButton.style.display = "none";
+      cornerButton.classList.remove("fullScreenIntroButton");
     }
 
     function showChoiceLayer() {
