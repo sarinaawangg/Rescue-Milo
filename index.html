@@ -70,6 +70,27 @@
     #choiceC { top: 50%; }
     #choiceD { top: 75%; }
 
+
+    #cornerButton {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      width: 25vw;
+      height: 25vh;
+      z-index: 25;
+      display: none;
+      cursor: pointer;
+      background: transparent;
+      border: none;
+      padding: 0;
+      margin: 0;
+      opacity: 0;
+    }
+
+    #cornerButton:focus {
+      outline: none;
+    }
+
     #status {
       position: absolute;
       top: 18px;
@@ -157,6 +178,9 @@
       <button id="choiceC" class="choiceZone" aria-label="Choice C: Dismissive"></button>
       <button id="choiceD" class="choiceZone" aria-label="Choice D: Fearful"></button>
     </div>
+
+    <button id="cornerButton" aria-label="Continue or restart"></button>
+
 
     <div id="status">
       Question <span id="questionNumber">1</span> / <span id="questionTotal">5</span><br>
@@ -291,6 +315,7 @@
     const videoMap = Object.fromEntries(videos.map(video => [video.id, video]));
     const playerContainer = document.getElementById("playerContainer");
     const choiceLayer = document.getElementById("choiceLayer");
+    const cornerButton = document.getElementById("cornerButton");
     const hint = document.getElementById("hint");
     const resultScreen = document.getElementById("resultScreen");
     const status = document.getElementById("status");
@@ -313,6 +338,23 @@
     function getFinalResult() {
       const scores = { anxiety, avoidance };
       return finalResults.find(item => item.condition(scores));
+    }
+
+
+    function updateCornerButton() {
+      const current = videoMap[currentVideoId];
+      if (!current) {
+        cornerButton.style.display = "none";
+        return;
+      }
+
+      // Intro video: invisible lower-right button goes to Choice 1.
+      // Result videos: invisible lower-right button resets back to Intro.
+      if (current.type === "intro" || current.type === "result") {
+        cornerButton.style.display = "block";
+      } else {
+        cornerButton.style.display = "none";
+      }
     }
 
     function updateStatus() {
@@ -360,6 +402,7 @@
 
       currentVideoId = videoId;
       choiceLayer.style.display = "none";
+      cornerButton.style.display = "none";
       hint.style.display = "none";
       resultScreen.style.display = "none";
       startOverlay.style.display = "none";
@@ -381,6 +424,7 @@
         startOverlay.style.display = "flex";
       });
 
+      updateCornerButton();
       updateStatus();
     }
 
@@ -410,6 +454,7 @@
       }
 
       choiceLayer.style.display = "none";
+      cornerButton.style.display = "none";
       hint.style.display = "none";
       status.style.display = "none";
       resultScreen.style.display = "flex";
@@ -419,6 +464,25 @@
       document.getElementById("resultDetails").textContent =
         `Final score: Anxiety ${anxiety}, Avoidance ${avoidance}. Your choices created this ending based on the scoring table.`;
     }
+
+
+    cornerButton.addEventListener("click", () => {
+      const current = videoMap[currentVideoId];
+      if (!current) return;
+
+      if (current.type === "intro") {
+        playVideo(current.next || "choice1");
+        return;
+      }
+
+      if (current.type === "result") {
+        anxiety = 0;
+        avoidance = 0;
+        questionNumber = 1;
+        currentVideoId = "intro";
+        playVideo(currentVideoId);
+      }
+    });
 
     document.getElementById("choiceA").addEventListener("click", () => choose("A"));
     document.getElementById("choiceB").addEventListener("click", () => choose("B"));
