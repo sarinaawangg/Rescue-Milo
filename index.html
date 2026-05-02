@@ -323,10 +323,14 @@
 
     let currentVideoId = "intro";
     let currentPlayer = null;
+    let progressTimer = null;
+    let choiceLayerActive = false;
+    let cornerButtonActive = false;
     let anxiety = 0;
     let avoidance = 0;
     let questionNumber = 1;
     const totalQuestions = 5;
+    const SHOW_CHOICES_SECONDS_BEFORE_END = 30;
 
     document.getElementById("questionTotal").textContent = totalQuestions;
 
@@ -341,20 +345,63 @@
     }
 
 
-    function updateCornerButton() {
-      const current = videoMap[currentVideoId];
-      if (!current) {
-        cornerButton.style.display = "none";
-        return;
-      }
+    function showCornerButton() {
+      cornerButtonActive = true;
+      cornerButton.style.display = "block";
+    }
 
-      // Intro video: invisible lower-right button goes to Choice 1.
-      // Result videos: invisible lower-right button resets back to Intro.
-      if (current.type === "intro" || current.type === "result") {
-        cornerButton.style.display = "block";
-      } else {
-        cornerButton.style.display = "none";
+    function hideCornerButton() {
+      cornerButtonActive = false;
+      cornerButton.style.display = "none";
+    }
+
+    function showChoiceLayer() {
+      choiceLayerActive = true;
+      choiceLayer.style.display = "block";
+      hint.style.display = "block";
+    }
+
+    function hideChoiceLayer() {
+      choiceLayerActive = false;
+      choiceLayer.style.display = "none";
+      hint.style.display = "none";
+    }
+
+    function stopProgressTimer() {
+      if (progressTimer) {
+        clearInterval(progressTimer);
+        progressTimer = null;
       }
+    }
+
+    async function getPlayerNumber(propertyName) {
+      if (!currentPlayer) return NaN;
+      try {
+        const value = currentPlayer[propertyName];
+        const resolvedValue = typeof value?.then === "function" ? await value : value;
+        return Number(resolvedValue);
+      } catch (error) {
+        return NaN;
+      }
+    }
+
+    function startChoiceCountdownWatcher() {
+      stopProgressTimer();
+
+      progressTimer = setInterval(async () => {
+        const current = videoMap[currentVideoId];
+        if (!current || current.type !== "choice" || choiceLayerActive) return;
+
+        const duration = await getPlayerNumber("duration");
+        const currentTime = await getPlayerNumber("currentTime");
+
+        if (!Number.isFinite(duration) || !Number.isFinite(currentTime) || duration <= 0) return;
+
+        const secondsLeft = duration - currentTime;
+        if (secondsLeft <= SHOW_CHOICES_SECONDS_BEFORE_END) {
+          showChoiceLayer();
+        }
+      }, 500);
     }
 
     function updateStatus() {
@@ -375,19 +422,18 @@
       const current = videoMap[currentVideoId];
       if (!current) return;
 
-      if (current.type === "intro") {
-        playVideo(current.next);
+      stopProgressTimer();
+
+      // Do not auto-transfer when any video ends.
+      // Intro/result videos wait for the lower-right invisible button.
+      // Choice videos wait for one of the four invisible choice zones.
+      if (current.type === "intro" || current.type === "result") {
+        showCornerButton();
         return;
       }
 
       if (current.type === "choice") {
-        choiceLayer.style.display = "block";
-        hint.style.display = "block";
-        return;
-      }
-
-      if (current.type === "result") {
-        showFinalResult();
+        showChoiceLayer();
       }
     }
 
@@ -401,9 +447,9 @@
       }
 
       currentVideoId = videoId;
-      choiceLayer.style.display = "none";
-      cornerButton.style.display = "none";
-      hint.style.display = "none";
+      stopProgressTimer();
+      hideChoiceLayer();
+      hideCornerButton();
       resultScreen.style.display = "none";
       startOverlay.style.display = "none";
 
@@ -420,17 +466,23 @@
       currentPlayer = Stream(iframe);
       currentPlayer.addEventListener("ended", handleVideoEnded);
 
+      if (videoData.type === "choice") {
+        startChoiceCountdownWatcher();
+      }
+
       currentPlayer.play().catch(() => {
         startOverlay.style.display = "flex";
       });
 
-      updateCornerButton();
       updateStatus();
     }
 
     function choose(choiceLetter) {
       const current = videoMap[currentVideoId];
-      if (!current || current.type !== "choice") return;
+      if (!choiceLayerActive || !current || current.type !== "choice") return;
+
+      stopProgressTimer();
+      hideChoiceLayer();
 
       anxiety += choiceScores[choiceLetter].anxiety;
       avoidance += choiceScores[choiceLetter].avoidance;
@@ -453,9 +505,8 @@
         currentPlayer.pause();
       }
 
-      choiceLayer.style.display = "none";
-      cornerButton.style.display = "none";
-      hint.style.display = "none";
+      hideChoiceLayer();
+      hideCornerButton();
       status.style.display = "none";
       resultScreen.style.display = "flex";
 
@@ -468,7 +519,7 @@
 
     cornerButton.addEventListener("click", () => {
       const current = videoMap[currentVideoId];
-      if (!current) return;
+      if (!cornerButtonActive || !current) return;
 
       if (current.type === "intro") {
         playVideo(current.next || "choice1");
