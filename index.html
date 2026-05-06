@@ -73,7 +73,6 @@
     #choiceC { top: 50%; }
     #choiceD { top: 75%; }
 
-
     #cornerButton {
       position: absolute;
       right: auto;
@@ -193,7 +192,6 @@
     </div>
 
     <button id="cornerButton" aria-label="Continue or restart"></button>
-
 
     <div id="status">
       Question <span id="questionNumber">1</span> / <span id="questionTotal">5</span><br>
@@ -342,9 +340,28 @@
     let anxiety = 0;
     let avoidance = 0;
     let questionNumber = 1;
+
     const totalQuestions = 5;
-    const SHOW_CHOICES_SECONDS_BEFORE_END = 30;
+
+    /*
+      Timing rules:
+      Intro video: full-screen invisible button appears 5 seconds before the end.
+      Choice 1: choice buttons appear 20 seconds before the end.
+      Choice 2: choice buttons appear 38 seconds before the end.
+      Choice 3: choice buttons appear 42 seconds before the end.
+      Choice 4: choice buttons appear 37 seconds before the end.
+      Choice 5: choice buttons appear 43 seconds before the end.
+      Result videos: restart button appears only when the video ends.
+    */
     const SHOW_INTRO_BUTTON_SECONDS_BEFORE_END = 5;
+
+    const CHOICE_BUTTON_TIMINGS = {
+      choice1: 20,
+      choice2: 38,
+      choice3: 42,
+      choice4: 37,
+      choice5: 43
+    };
 
     // Match the invisible clickable areas to the actual visible video frame.
     // Your videos are widescreen 16:9. If you ever switch to vertical video, change this number.
@@ -411,7 +428,6 @@
       return finalResults.find(item => item.condition(scores));
     }
 
-
     function showCornerButton() {
       const current = videoMap[currentVideoId];
 
@@ -456,6 +472,7 @@
 
     async function getPlayerNumber(propertyName) {
       if (!currentPlayer) return NaN;
+
       try {
         const value = currentPlayer[propertyName];
         const resolvedValue = typeof value?.then === "function" ? await value : value;
@@ -470,6 +487,7 @@
 
       progressTimer = setInterval(async () => {
         const current = videoMap[currentVideoId];
+
         if (!current || current.type !== "choice" || choiceLayerActive) return;
 
         const duration = await getPlayerNumber("duration");
@@ -478,7 +496,12 @@
         if (!Number.isFinite(duration) || !Number.isFinite(currentTime) || duration <= 0) return;
 
         const secondsLeft = duration - currentTime;
-        if (secondsLeft <= SHOW_CHOICES_SECONDS_BEFORE_END) {
+
+        // Each choice video has its own timing.
+        // If a video ID is missing from the table, it falls back to 30 seconds.
+        const showSecondsBeforeEnd = CHOICE_BUTTON_TIMINGS[currentVideoId] ?? 30;
+
+        if (secondsLeft <= showSecondsBeforeEnd) {
           showChoiceLayer();
         }
       }, 500);
@@ -489,6 +512,7 @@
 
       progressTimer = setInterval(async () => {
         const current = videoMap[currentVideoId];
+
         if (!current || current.type !== "intro" || cornerButtonActive) return;
 
         const duration = await getPlayerNumber("duration");
@@ -497,6 +521,7 @@
         if (!Number.isFinite(duration) || !Number.isFinite(currentTime) || duration <= 0) return;
 
         const secondsLeft = duration - currentTime;
+
         if (secondsLeft <= SHOW_INTRO_BUTTON_SECONDS_BEFORE_END) {
           showCornerButton();
         }
@@ -586,6 +611,7 @@
 
     function choose(choiceLetter) {
       const current = videoMap[currentVideoId];
+
       if (!choiceLayerActive || !current || current.type !== "choice") return;
 
       stopProgressTimer();
@@ -623,9 +649,9 @@
         `Final score: Anxiety ${anxiety}, Avoidance ${avoidance}. Your choices created this ending based on the scoring table.`;
     }
 
-
     cornerButton.addEventListener("click", () => {
       const current = videoMap[currentVideoId];
+
       if (!cornerButtonActive || !current) return;
 
       if (current.type === "intro") {
@@ -649,6 +675,7 @@
 
     document.getElementById("startButton").addEventListener("click", () => {
       startOverlay.style.display = "none";
+
       if (currentPlayer) {
         currentPlayer.muted = false;
         currentPlayer.volume = 1;
@@ -669,6 +696,7 @@
     });
 
     window.addEventListener("resize", applyInteractiveLayerLayout);
+
     window.addEventListener("orientationchange", () => {
       setTimeout(applyInteractiveLayerLayout, 250);
     });
