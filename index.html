@@ -44,9 +44,12 @@
 
     #choiceLayer {
       position: absolute;
-      inset: 0;
       display: none;
       z-index: 20;
+      left: 0;
+      top: 0;
+      width: 100vw;
+      height: 100vh;
     }
 
     .choiceZone {
@@ -73,10 +76,10 @@
 
     #cornerButton {
       position: absolute;
-      right: 0;
-      bottom: 0;
-      width: 25vw;
-      height: 25vh;
+      right: auto;
+      bottom: auto;
+      width: clamp(140px, 28vw, 420px);
+      height: clamp(110px, 28vh, 320px);
       z-index: 25;
       display: none;
       cursor: pointer;
@@ -91,19 +94,10 @@
       outline: none;
     }
 
-    /* When the intro video finishes, the invisible continue button covers the whole screen. */
-    #cornerButton.fullScreenIntroButton {
-      inset: 0;
-      right: auto;
-      bottom: auto;
-      width: 100vw;
-      height: 100vh;
-    }
-
     #status {
       position: absolute;
+      top: 18px;
       left: 18px;
-      bottom: 18px;
       z-index: 30;
       background: rgba(0, 0, 0, 0.5);
       padding: 10px 14px;
@@ -341,7 +335,60 @@
     const totalQuestions = 5;
     const SHOW_CHOICES_SECONDS_BEFORE_END = 30;
 
+    // Match the invisible clickable areas to the actual visible video frame.
+    // Your videos are widescreen 16:9. If you ever switch to vertical video, change this number.
+    const VIDEO_ASPECT_RATIO = 16 / 9;
+
     document.getElementById("questionTotal").textContent = totalQuestions;
+
+    function getVisibleVideoRect() {
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const viewportRatio = viewportWidth / viewportHeight;
+
+      let width;
+      let height;
+      let left;
+      let top;
+
+      if (viewportRatio > VIDEO_ASPECT_RATIO) {
+        // Wide screen: video fills the height, with side space.
+        height = viewportHeight;
+        width = height * VIDEO_ASPECT_RATIO;
+        left = (viewportWidth - width) / 2;
+        top = 0;
+      } else {
+        // Tall/narrow screen: video fills the width, with top/bottom space.
+        width = viewportWidth;
+        height = width / VIDEO_ASPECT_RATIO;
+        left = 0;
+        top = (viewportHeight - height) / 2;
+      }
+
+      return { left, top, width, height };
+    }
+
+    function applyInteractiveLayerLayout() {
+      const rect = getVisibleVideoRect();
+
+      // Choice buttons cover the visible video only, divided into four equal horizontal zones.
+      choiceLayer.style.left = `${rect.left}px`;
+      choiceLayer.style.top = `${rect.top}px`;
+      choiceLayer.style.width = `${rect.width}px`;
+      choiceLayer.style.height = `${rect.height}px`;
+
+      // Result-video restart button stays in the lower-right of the visible video frame.
+      // It grows/shrinks with the screen so it remains easy to click on phones, tablets, and laptops.
+      if (!cornerButton.classList.contains("fullScreenIntroButton")) {
+        const buttonWidth = Math.min(Math.max(rect.width * 0.24, 140), rect.width * 0.4);
+        const buttonHeight = Math.min(Math.max(rect.height * 0.24, 110), rect.height * 0.4);
+
+        cornerButton.style.left = `${rect.left + rect.width - buttonWidth}px`;
+        cornerButton.style.top = `${rect.top + rect.height - buttonHeight}px`;
+        cornerButton.style.width = `${buttonWidth}px`;
+        cornerButton.style.height = `${buttonHeight}px`;
+      }
+    }
 
     function addCloudflareParams(url) {
       const separator = url.includes("?") ? "&" : "?";
@@ -355,16 +402,6 @@
 
 
     function showCornerButton() {
-      const current = videoMap[currentVideoId];
-
-      // Intro: after the intro video finishes, clicking anywhere continues to Choice 1.
-      // Results: after a result video finishes, only the lower-right invisible button restarts.
-      if (current && current.type === "intro") {
-        cornerButton.classList.add("fullScreenIntroButton");
-      } else {
-        cornerButton.classList.remove("fullScreenIntroButton");
-      }
-
       cornerButtonActive = true;
       cornerButton.style.display = "block";
     }
@@ -372,10 +409,10 @@
     function hideCornerButton() {
       cornerButtonActive = false;
       cornerButton.style.display = "none";
-      cornerButton.classList.remove("fullScreenIntroButton");
     }
 
     function showChoiceLayer() {
+      applyInteractiveLayerLayout();
       choiceLayerActive = true;
       choiceLayer.style.display = "block";
       hint.style.display = "block";
@@ -472,6 +509,7 @@
       hideCornerButton();
       resultScreen.style.display = "none";
       startOverlay.style.display = "none";
+      applyInteractiveLayerLayout();
 
       playerContainer.innerHTML = "";
 
@@ -583,7 +621,13 @@
       playVideo(currentVideoId);
     });
 
+    window.addEventListener("resize", applyInteractiveLayerLayout);
+    window.addEventListener("orientationchange", () => {
+      setTimeout(applyInteractiveLayerLayout, 250);
+    });
+
     window.addEventListener("load", () => {
+      applyInteractiveLayerLayout();
       playVideo(currentVideoId);
     });
   </script>
