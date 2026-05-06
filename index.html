@@ -93,7 +93,7 @@
       outline: none;
     }
 
-    /* Intro continue button: appears 5 seconds before the intro ends and covers the whole screen. */
+    /* Intro continue button covers the whole screen */
     #cornerButton.fullScreenIntroButton {
       left: 0 !important;
       top: 0 !important;
@@ -103,7 +103,9 @@
       height: 100vh !important;
     }
 
+    /* Hidden score box */
     #status {
+      display: none !important;
       position: absolute;
       left: 18px;
       bottom: 18px;
@@ -217,18 +219,9 @@
     </section>
   </main>
 
-  <!-- Required for Cloudflare Stream iframe player events such as ended/play/pause. -->
   <script src="https://embed.cloudflarestream.com/embed/sdk.latest.js"></script>
 
   <script>
-    /**************************************************************
-     * IMPORTANT
-     * This version is for Cloudflare Stream iframe URLs.
-     * Use the /iframe URL, NOT the /watch URL.
-     * Example:
-     * https://customer-xxxx.cloudflarestream.com/VIDEO_UID/iframe
-     **************************************************************/
-
     const videos = [
       {
         id: "intro",
@@ -263,7 +256,7 @@
       {
         id: "choice5",
         type: "choice",
-        embedSrc: "https://customer-cpwq0pj4qnpycdbg.cloudflarestream.com/d3aabbc4b9d9ed4192c0208276dae8b3/iframe?poster=https%3A%2F%2Fcustomer-cpwq0pj4qnpycdbg.cloudflarestream.com%2Fd3aabbc4b9d9ed4192c0208276dae8b3%2Fthumbnails%2Fthumbnail.jpg%3Ftime%3D%26height%3D600",
+        embedSrc: "https://customer-cpwq0pj4qnpycdbg.cloudflarestream.com/b07b9619bac50b3f86775f8e4007c2bd/iframe?poster=https%3A%2F%2Fcustomer-cpwq0pj4qnpycdbg.cloudflarestream.com%2Fb07b9619bac50b3f86775f8e4007c2bd%2Fthumbnails%2Fthumbnail.jpg%3Ftime%3D%26height%3D600",
         nextByResult: {
           Secure: "resultSecure",
           Anxious: "resultAnxious",
@@ -343,17 +336,6 @@
 
     const totalQuestions = 5;
 
-    /*
-      Timing rules:
-      Intro video: full-screen invisible button appears 5 seconds before the end.
-      Choice 1: choice buttons appear 20 seconds before the end.
-      Choice 2: choice buttons appear 38 seconds before the end.
-      Choice 3: choice buttons appear 42 seconds before the end.
-      Choice 4: choice buttons appear 37 seconds before the end.
-      Choice 5: choice buttons appear 43 seconds before the end.
-      Result videos: restart button appears as soon as the video starts.
-      All videos: pause near the end to hold the last frame.
-    */
     const SHOW_INTRO_BUTTON_SECONDS_BEFORE_END = 5;
 
     const CHOICE_BUTTON_TIMINGS = {
@@ -364,17 +346,7 @@
       choice5: 43
     };
 
-    /*
-      This makes the video pause right before it fully ends,
-      so it holds on the final frame instead of turning black.
-
-      If choice5 still becomes black, change this number to 1 or 2.
-      That means the black screen is already part of the uploaded video file.
-    */
     const HOLD_FINAL_FRAME_SECONDS_BEFORE_END = 0.35;
-
-    // Match the invisible clickable areas to the actual visible video frame.
-    // Your videos are widescreen 16:9. If you ever switch to vertical video, change this number.
     const VIDEO_ASPECT_RATIO = 16 / 9;
 
     document.getElementById("questionTotal").textContent = totalQuestions;
@@ -390,13 +362,11 @@
       let top;
 
       if (viewportRatio > VIDEO_ASPECT_RATIO) {
-        // Wide screen: video fills the height, with side space.
         height = viewportHeight;
         width = height * VIDEO_ASPECT_RATIO;
         left = (viewportWidth - width) / 2;
         top = 0;
       } else {
-        // Tall/narrow screen: video fills the width, with top/bottom space.
         width = viewportWidth;
         height = width / VIDEO_ASPECT_RATIO;
         left = 0;
@@ -409,14 +379,11 @@
     function applyInteractiveLayerLayout() {
       const rect = getVisibleVideoRect();
 
-      // Choice buttons cover the visible video only, divided into four equal horizontal zones.
       choiceLayer.style.left = `${rect.left}px`;
       choiceLayer.style.top = `${rect.top}px`;
       choiceLayer.style.width = `${rect.width}px`;
       choiceLayer.style.height = `${rect.height}px`;
 
-      // Result-video restart button stays in the lower-right of the visible video frame.
-      // It grows/shrinks with the screen so it remains easy to click on phones, tablets, and laptops.
       if (!cornerButton.classList.contains("fullScreenIntroButton")) {
         const buttonWidth = Math.min(Math.max(rect.width * 0.24, 140), rect.width * 0.4);
         const buttonHeight = Math.min(Math.max(rect.height * 0.24, 110), rect.height * 0.4);
@@ -441,8 +408,6 @@
     function showCornerButton() {
       const current = videoMap[currentVideoId];
 
-      // Intro: make the invisible continue button cover the whole page.
-      // Result videos: keep the restart button in the lower-right of the visible video.
       if (current && current.type === "intro") {
         cornerButton.classList.add("fullScreenIntroButton");
       } else {
@@ -494,7 +459,6 @@
 
     async function holdLastFrameIfNearEnd() {
       const current = videoMap[currentVideoId];
-
       if (!current || !currentPlayer) return false;
 
       const duration = await getPlayerNumber("duration");
@@ -538,7 +502,6 @@
 
       progressTimer = setInterval(async () => {
         const current = videoMap[currentVideoId];
-
         if (!current || current.type !== "choice") return;
 
         const shouldStop = await holdLastFrameIfNearEnd();
@@ -552,9 +515,6 @@
         if (!Number.isFinite(duration) || !Number.isFinite(currentTime) || duration <= 0) return;
 
         const secondsLeft = duration - currentTime;
-
-        // Each choice video has its own timing.
-        // If a video ID is missing from the table, it falls back to 30 seconds.
         const showSecondsBeforeEnd = CHOICE_BUTTON_TIMINGS[currentVideoId] ?? 30;
 
         if (secondsLeft <= showSecondsBeforeEnd) {
@@ -568,7 +528,6 @@
 
       progressTimer = setInterval(async () => {
         const current = videoMap[currentVideoId];
-
         if (!current || current.type !== "intro") return;
 
         const shouldStop = await holdLastFrameIfNearEnd();
@@ -592,12 +551,10 @@
     function startResultVideoWatcher() {
       stopProgressTimer();
 
-      // Result videos should have the invisible restart button immediately.
       showCornerButton();
 
       progressTimer = setInterval(async () => {
         const current = videoMap[currentVideoId];
-
         if (!current || current.type !== "result") return;
 
         await holdLastFrameIfNearEnd();
@@ -605,27 +562,15 @@
     }
 
     function updateStatus() {
-      const current = videoMap[currentVideoId];
-
-      if (!current || current.type !== "choice") {
-        status.style.display = "none";
-        return;
-      }
-
-      status.style.display = "block";
-      document.getElementById("questionNumber").textContent = questionNumber;
-      document.getElementById("anxietyScore").textContent = anxiety;
-      document.getElementById("avoidanceScore").textContent = avoidance;
+      status.style.display = "none";
     }
 
     function handleVideoEnded() {
       const current = videoMap[currentVideoId];
-
       if (!current) return;
 
       stopProgressTimer();
 
-      // This is still here as backup in case the video reaches the actual end.
       if (current.type === "intro") {
         showCornerButton();
         return;
@@ -694,7 +639,6 @@
 
     function choose(choiceLetter) {
       const current = videoMap[currentVideoId];
-
       if (!choiceLayerActive || !current || current.type !== "choice") return;
 
       stopProgressTimer();
@@ -734,7 +678,6 @@
 
     cornerButton.addEventListener("click", () => {
       const current = videoMap[currentVideoId];
-
       if (!cornerButtonActive || !current) return;
 
       if (current.type === "intro") {
@@ -779,7 +722,6 @@
     });
 
     window.addEventListener("resize", applyInteractiveLayerLayout);
-
     window.addEventListener("orientationchange", () => {
       setTimeout(applyInteractiveLayerLayout, 250);
     });
