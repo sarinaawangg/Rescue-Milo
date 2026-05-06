@@ -94,10 +94,20 @@
       outline: none;
     }
 
+    /* Intro continue button: appears 5 seconds before the intro ends and covers the whole screen. */
+    #cornerButton.fullScreenIntroButton {
+      left: 0 !important;
+      top: 0 !important;
+      right: auto !important;
+      bottom: auto !important;
+      width: 100vw !important;
+      height: 100vh !important;
+    }
+
     #status {
       position: absolute;
-      top: 18px;
       left: 18px;
+      bottom: 18px;
       z-index: 30;
       background: rgba(0, 0, 0, 0.5);
       padding: 10px 14px;
@@ -334,6 +344,7 @@
     let questionNumber = 1;
     const totalQuestions = 5;
     const SHOW_CHOICES_SECONDS_BEFORE_END = 30;
+    const SHOW_INTRO_BUTTON_SECONDS_BEFORE_END = 5;
 
     // Match the invisible clickable areas to the actual visible video frame.
     // Your videos are widescreen 16:9. If you ever switch to vertical video, change this number.
@@ -402,6 +413,17 @@
 
 
     function showCornerButton() {
+      const current = videoMap[currentVideoId];
+
+      // Intro: make the invisible continue button cover the whole page.
+      // Result videos: keep the restart button in the lower-right of the visible video.
+      if (current && current.type === "intro") {
+        cornerButton.classList.add("fullScreenIntroButton");
+      } else {
+        cornerButton.classList.remove("fullScreenIntroButton");
+        applyInteractiveLayerLayout();
+      }
+
       cornerButtonActive = true;
       cornerButton.style.display = "block";
     }
@@ -409,6 +431,7 @@
     function hideCornerButton() {
       cornerButtonActive = false;
       cornerButton.style.display = "none";
+      cornerButton.classList.remove("fullScreenIntroButton");
     }
 
     function showChoiceLayer() {
@@ -461,6 +484,25 @@
       }, 500);
     }
 
+    function startIntroButtonCountdownWatcher() {
+      stopProgressTimer();
+
+      progressTimer = setInterval(async () => {
+        const current = videoMap[currentVideoId];
+        if (!current || current.type !== "intro" || cornerButtonActive) return;
+
+        const duration = await getPlayerNumber("duration");
+        const currentTime = await getPlayerNumber("currentTime");
+
+        if (!Number.isFinite(duration) || !Number.isFinite(currentTime) || duration <= 0) return;
+
+        const secondsLeft = duration - currentTime;
+        if (secondsLeft <= SHOW_INTRO_BUTTON_SECONDS_BEFORE_END) {
+          showCornerButton();
+        }
+      }, 500);
+    }
+
     function updateStatus() {
       const current = videoMap[currentVideoId];
 
@@ -482,7 +524,8 @@
       stopProgressTimer();
 
       // Do not auto-transfer when any video ends.
-      // Intro/result videos wait for the lower-right invisible button.
+      // Intro waits for the full-screen invisible button.
+      // Result videos wait for the lower-right invisible button.
       // Choice videos wait for one of the four invisible choice zones.
       if (current.type === "intro" || current.type === "result") {
         showCornerButton();
@@ -525,6 +568,10 @@
       currentPlayer.muted = false;
       currentPlayer.volume = 1;
       currentPlayer.addEventListener("ended", handleVideoEnded);
+
+      if (videoData.type === "intro") {
+        startIntroButtonCountdownWatcher();
+      }
 
       if (videoData.type === "choice") {
         startChoiceCountdownWatcher();
