@@ -351,7 +351,8 @@
       Choice 3: choice buttons appear 42 seconds before the end.
       Choice 4: choice buttons appear 37 seconds before the end.
       Choice 5: choice buttons appear 43 seconds before the end.
-      Result videos: restart button appears only when the video ends.
+      Result videos: restart button appears as soon as the video starts.
+      All videos: pause near the end to hold the last frame.
     */
     const SHOW_INTRO_BUTTON_SECONDS_BEFORE_END = 5;
 
@@ -362,6 +363,15 @@
       choice4: 37,
       choice5: 43
     };
+
+    /*
+      This makes the video pause right before it fully ends,
+      so it holds on the final frame instead of turning black.
+
+      If choice5 still becomes black, change this number to 1 or 2.
+      That means the black screen is already part of the uploaded video file.
+    */
+    const HOLD_FINAL_FRAME_SECONDS_BEFORE_END = 0.35;
 
     // Match the invisible clickable areas to the actual visible video frame.
     // Your videos are widescreen 16:9. If you ever switch to vertical video, change this number.
@@ -482,13 +492,59 @@
       }
     }
 
+    async function holdLastFrameIfNearEnd() {
+      const current = videoMap[currentVideoId];
+
+      if (!current || !currentPlayer) return false;
+
+      const duration = await getPlayerNumber("duration");
+      const currentTime = await getPlayerNumber("currentTime");
+
+      if (!Number.isFinite(duration) || !Number.isFinite(currentTime) || duration <= 0) {
+        return false;
+      }
+
+      const secondsLeft = duration - currentTime;
+
+      if (secondsLeft <= HOLD_FINAL_FRAME_SECONDS_BEFORE_END) {
+        try {
+          currentPlayer.pause();
+        } catch (error) {
+          console.warn("Could not pause on final frame:", error);
+        }
+
+        stopProgressTimer();
+
+        if (current.type === "intro") {
+          showCornerButton();
+        }
+
+        if (current.type === "choice") {
+          showChoiceLayer();
+        }
+
+        if (current.type === "result") {
+          showCornerButton();
+        }
+
+        return true;
+      }
+
+      return false;
+    }
+
     function startChoiceCountdownWatcher() {
       stopProgressTimer();
 
       progressTimer = setInterval(async () => {
         const current = videoMap[currentVideoId];
 
-        if (!current || current.type !== "choice" || choiceLayerActive) return;
+        if (!current || current.type !== "choice") return;
+
+        const shouldStop = await holdLastFrameIfNearEnd();
+        if (shouldStop) return;
+
+        if (choiceLayerActive) return;
 
         const duration = await getPlayerNumber("duration");
         const currentTime = await getPlayerNumber("currentTime");
@@ -504,7 +560,7 @@
         if (secondsLeft <= showSecondsBeforeEnd) {
           showChoiceLayer();
         }
-      }, 500);
+      }, 250);
     }
 
     function startIntroButtonCountdownWatcher() {
@@ -513,7 +569,12 @@
       progressTimer = setInterval(async () => {
         const current = videoMap[currentVideoId];
 
-        if (!current || current.type !== "intro" || cornerButtonActive) return;
+        if (!current || current.type !== "intro") return;
+
+        const shouldStop = await holdLastFrameIfNearEnd();
+        if (shouldStop) return;
+
+        if (cornerButtonActive) return;
 
         const duration = await getPlayerNumber("duration");
         const currentTime = await getPlayerNumber("currentTime");
@@ -525,7 +586,22 @@
         if (secondsLeft <= SHOW_INTRO_BUTTON_SECONDS_BEFORE_END) {
           showCornerButton();
         }
-      }, 500);
+      }, 250);
+    }
+
+    function startResultVideoWatcher() {
+      stopProgressTimer();
+
+      // Result videos should have the invisible restart button immediately.
+      showCornerButton();
+
+      progressTimer = setInterval(async () => {
+        const current = videoMap[currentVideoId];
+
+        if (!current || current.type !== "result") return;
+
+        await holdLastFrameIfNearEnd();
+      }, 250);
     }
 
     function updateStatus() {
@@ -544,15 +620,18 @@
 
     function handleVideoEnded() {
       const current = videoMap[currentVideoId];
+
       if (!current) return;
 
       stopProgressTimer();
 
-      // Do not auto-transfer when any video ends.
-      // Intro waits for the full-screen invisible button.
-      // Result videos wait for the lower-right invisible button.
-      // Choice videos wait for one of the four invisible choice zones.
-      if (current.type === "intro" || current.type === "result") {
+      // This is still here as backup in case the video reaches the actual end.
+      if (current.type === "intro") {
+        showCornerButton();
+        return;
+      }
+
+      if (current.type === "result") {
         showCornerButton();
         return;
       }
@@ -600,6 +679,10 @@
 
       if (videoData.type === "choice") {
         startChoiceCountdownWatcher();
+      }
+
+      if (videoData.type === "result") {
+        startResultVideoWatcher();
       }
 
       currentPlayer.play().catch(() => {
